@@ -4,7 +4,7 @@
 ![python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
-Scrape product listings from any shop into Excel, CSV, JSON or Google Sheets, keep a price history, and get a Discord, Slack or Telegram message when something gets cheaper.
+Scrape product listings from online shops into Excel, CSV, JSON or Google Sheets, keep a price history, and get a Discord, Slack or Telegram message when something gets cheaper.
 
 Each site is one small YAML file. Adding a new shop means writing a few CSS selectors, not code.
 
