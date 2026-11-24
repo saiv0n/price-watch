@@ -1,0 +1,27 @@
+# books.toscrape.com is a sandbox site built for scraping practice.
+name: books
+start_url: https://books.toscrape.com/catalogue/category/books/mystery_3/index.html
+item: article.product_pod
+key: url
+next_page: li.next a
+delay: 1.0
+
+fields:
+  title: {css: h3 a, attr: title}
+  url: {css: h3 a, attr: href, type: url}
+  price: {css: .price_color, type: price}
+  in_stock: {css: .instock.availability, re: "In stock", type: bool, default: false}
+  rating:
+    css: p.star-rating
+    attr: class
+    re: "(One|Two|Three|Four|Five)"
+    map: {One: 1, Two: 2, Three: 3, Four: 4, Five: 5}
+  image: {css: .image_container img, attr: src, type: url}
+
+alerts:
+  drop_percent: 5
+
+notify:
+  webhook: ${PRICE_WATCH_WEBHOOK}
+  telegram_token: ${TELEGRAM_TOKEN}
+  telegram_chat: ${TELEGRAM_CHAT_ID}
