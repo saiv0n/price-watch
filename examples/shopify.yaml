@@ -1,0 +1,12 @@
+# Any Shopify store. Use the shop root for the whole catalogue,
+# or a /collections/<name> url for one collection.
+name: my-shop
+source: shopify
+start_url: https://your-store.example.com/collections/sale
+delay: 1.5
+
+alerts:
+  drop_percent: 10
+
+notify:
+  webhook: ${PRICE_WATCH_WEBHOOK}

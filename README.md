@@ -1,29 +1,38 @@
 # price-watch
 
-Scrape product listings from any shop into CSV, Excel or JSON, keep a price history in SQLite, and get a Discord, Slack or Telegram message when something gets cheaper.
+[![tests](https://github.com/saiv0n/price-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/saiv0n/price-watch/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
 
-Every site is described by one small YAML file, so adding a new shop means writing selectors, not code.
+Scrape product listings from any shop into Excel, CSV, JSON or Google Sheets, keep a price history, and get a Discord, Slack or Telegram message when something gets cheaper.
 
-```
-$ price-watch run examples/books.yaml -o books.xlsx
-32 items, 32 new, 0 price changes, 0 drops
-wrote books.xlsx
+Each site is one small YAML file. Adding a new shop means writing a few CSS selectors, not code.
 
-# a day later
-$ price-watch run examples/books.yaml
-32 items, 0 new, 1 price changes, 1 drops
-   -10.0%  47.82 -> 43.04  Sharp Objects
-```
+<p align="center"><img src="docs/demo.svg" alt="price-watch run output and a price drop alert" width="780"></p>
 
-## What it handles
+## What you get
 
-- Pagination, by following a "next" link until it runs out or hits `max_pages`
-- Prices in any common format: `£51.77`, `$1,299.00`, `1.299,90 TL`, `12 499 ₽`, `CHF 1'250.50`
-- Relative links and image paths, turned into absolute URLs
-- Polite crawling with a delay between requests, retries with backoff on 429/5xx, `Retry-After`, and robots.txt
-- JavaScript-rendered shops through headless Chromium (optional, see below)
-- Excel output with a frozen header row, filters and sensible column widths
-- Secrets like webhook URLs read from environment variables, never stored in the config
+This is a real run of [examples/books.yaml](examples/books.yaml) (the full file is in [data/books.csv](data/books.csv), refreshed daily by GitHub Actions):
+
+| title | price | in_stock | rating | upc | stock | category |
+|---|---|---|---|---|---|---|
+| Sharp Objects | 47.82 | True | 4 | e00eb4fd7b871a48 | 20 | Mystery |
+| In a Dark, Dark Wood | 19.63 | True | 1 | 19ed25f4641d5efd | 18 | Mystery |
+| The Past Never Ends | 56.50 | True | 4 | 5ee94540d0749ea0 | 16 | Mystery |
+
+The listing pages give title, price, rating and stock status. The tool then opens every product page for the UPC, exact stock count, category and description, and merges both into one row.
+
+## Features
+
+- Listing pages with pagination, plus optional product detail pages merged into the same row
+- Shopify stores read straight from their JSON catalogue, no selectors needed
+- Prices parsed in any common format: `£51.77`, `$1,299.00`, `1.299,90 TL`, `12 499 ₽`, `CHF 1'250.50`
+- Price history in SQLite, with new products and price changes reported on every run
+- Alerts to Discord, Slack or Telegram above a drop threshold you choose
+- Export to Excel (frozen header, filters, sized columns), CSV that opens cleanly in Excel, JSON, or a Google Sheet
+- Polite crawling: delay between requests, retries with backoff on 429 and 5xx, `Retry-After`, robots.txt
+- JavaScript-heavy shops through headless Chromium
+- Runs on a schedule for free with the included GitHub Actions workflow
 
 ## Install
 
@@ -33,14 +42,21 @@ cd price-watch
 pip install .
 ```
 
-For shops that render products with JavaScript:
+Optional extras:
 
 ```bash
-pip install '.[js]'
-playwright install chromium
+pip install '.[js]' && playwright install chromium   # JavaScript-rendered shops
+pip install '.[sheets]'                              # Google Sheets output
 ```
 
-and set `render_js: true` in the config.
+## Quick start
+
+```bash
+price-watch test examples/books.yaml -n 1     # check what the selectors pick up
+price-watch run examples/books.yaml -o books.xlsx
+```
+
+`test` fetches one page, prints the first items and warns about fields that came back empty, so you can fix selectors before a long crawl.
 
 ## Configure a site
 
@@ -48,7 +64,7 @@ and set `render_js: true` in the config.
 name: books
 start_url: https://books.toscrape.com/catalogue/category/books/mystery_3/index.html
 item: article.product_pod        # one match per product
-key: url                         # field that identifies a product between runs
+key: url                         # identifies a product between runs
 next_page: li.next a
 
 fields:
@@ -61,39 +77,58 @@ fields:
     re: "(One|Two|Three|Four|Five)"
     map: {One: 1, Two: 2, Three: 3, Four: 4, Five: 5}
 
+detail:                          # optional: visit each product page too
+  url_field: url
+  fields:
+    upc: "table.table-striped tr:nth-of-type(1) td"
+    stock: {css: .product_main .availability, re: "(\\d+) available", type: int}
+
 alerts:
-  drop_percent: 5                # only alert on drops of 5% or more
+  drop_percent: 5                # alert only on drops of 5% or more
 
 notify:
   webhook: ${PRICE_WATCH_WEBHOOK}
 ```
 
-Each field takes a CSS selector and optionally `attr` (read an attribute instead of text), `re` (keep the first regex group), `map` (translate values), `default`, and a `type` of `text`, `price`, `int`, `url` or `bool`. A plain string like `title: h1` is shorthand for `{css: h1}`.
+A field is a CSS selector, optionally with `attr` (read an attribute instead of the text), `re` (keep the first regex group), `map` (translate values), `default`, and a `type` of `text`, `price`, `int`, `url` or `bool`. `title: h1` is shorthand for `{css: h1}`.
 
 Other options: `start_urls` (a list), `max_pages`, `delay`, `timeout`, `user_agent`, `respect_robots`, `render_js`.
 
-Before a full run, check your selectors against one page:
+A product page that fails to load keeps its listing data and gets an `error` column instead of stopping the crawl.
 
-```bash
-price-watch test mysite.yaml -n 2
+## Shopify stores
+
+```yaml
+name: my-shop
+source: shopify
+start_url: https://store.example.com/collections/sale   # or the shop root for everything
 ```
 
-It prints the first items it extracted and warns about fields that came back empty on every item.
+This reads `/products.json` page by page and returns title, url, lowest price, compare-at price, whether it is on sale, availability, vendor, product type, SKU, variant count and image.
+
+## Google Sheets
+
+Create a service account in Google Cloud, share the sheet with its email, then:
+
+```bash
+export GOOGLE_SERVICE_ACCOUNT=/path/to/service-account.json
+price-watch run mysite.yaml -o sheets:<spreadsheet-id>/prices
+```
+
+The `prices` tab is replaced with the latest run and created if missing.
 
 ## Commands
 
 ```bash
-price-watch run CONFIG [-o out.xlsx]      # crawl, store, alert, optionally export
+price-watch run CONFIG [-o OUT]           # crawl, store, alert, optionally export
 price-watch test CONFIG [--url URL]       # dry run on one page
-price-watch export CONFIG out.csv         # export the last stored run
+price-watch export CONFIG OUT             # export the last stored run
 price-watch history CONFIG ITEM_URL       # price history of one product
 ```
 
-`--db path` chooses the SQLite file (default `price-watch.db`), `-v` logs every page.
+`OUT` is a `.xlsx`, `.csv` or `.json` path, or `sheets:<id>[/<tab>]`. `--db path` picks the SQLite file (default `price-watch.db`) and `-v` logs every page.
 
-## Notifications
-
-Set any of these and price drops are sent there:
+## Alerts
 
 ```bash
 export PRICE_WATCH_WEBHOOK=https://discord.com/api/webhooks/...   # or a Slack incoming webhook
@@ -101,17 +136,17 @@ export TELEGRAM_TOKEN=123456:ABC...
 export TELEGRAM_CHAT_ID=123456789
 ```
 
-A failing webhook is logged and does not throw away the crawl that was just saved.
+Secrets are read from the environment, so config files can be committed safely. A failing webhook is logged and never loses the crawl that was just saved.
 
 ## Run it on a schedule
 
-With cron, every six hours:
+[.github/workflows/crawl.yml](.github/workflows/crawl.yml) crawls once a day on GitHub's servers and commits the results to `data/`. Fork the repo, point it at your own config, and add `PRICE_WATCH_WEBHOOK` under Settings, Secrets to get alerts. No server needed.
+
+On your own machine, cron works too:
 
 ```
-0 */6 * * * cd /path/to/price-watch && PRICE_WATCH_WEBHOOK=... price-watch run examples/books.yaml
+0 */6 * * * cd /path/to/price-watch && price-watch run mysite.yaml -o latest.xlsx
 ```
-
-The included [GitHub Actions workflow](.github/workflows/ci.yml) runs the tests; the same setup can run a scheduled crawl and commit the CSV back to the repo if you don't have a server.
 
 ## Tests
 
@@ -119,11 +154,11 @@ The included [GitHub Actions workflow](.github/workflows/ci.yml) runs the tests;
 uv run pytest
 ```
 
-The tests run offline against saved pages and mocked HTTP, covering price parsing, pagination, change detection, all three export formats, retries, robots.txt and a full two-run CLI session with a webhook.
+30 tests run offline against saved pages and mocked HTTP: price parsing across locales, pagination, detail pages, Shopify, change detection, every export format, retries, robots.txt, and a full two-run session that ends in a webhook alert.
 
 ## Scraping responsibly
 
-The example targets books.toscrape.com, a site made for scraping practice. For real shops, read their terms, keep the delay reasonable and leave `respect_robots` on.
+The example targets books.toscrape.com, a site built for scraping practice. For real shops, check their terms, keep the delay reasonable and leave `respect_robots` on.
 
 ## License
 

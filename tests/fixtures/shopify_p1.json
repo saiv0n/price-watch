@@ -1,0 +1,44 @@
+{
+ "products": [
+  {
+   "title": "Wool Runner",
+   "handle": "wool-runner",
+   "vendor": "Acme",
+   "product_type": "Shoes",
+   "images": [
+    {
+     "src": "https://cdn.example/w.jpg"
+    }
+   ],
+   "variants": [
+    {
+     "price": "110.00",
+     "compare_at_price": "140.00",
+     "available": false,
+     "sku": "WR-8"
+    },
+    {
+     "price": "105.00",
+     "compare_at_price": "150.00",
+     "available": true,
+     "sku": "WR-9"
+    }
+   ]
+  },
+  {
+   "title": "Plain Tee",
+   "handle": "plain-tee",
+   "vendor": "Acme",
+   "product_type": "Shirts",
+   "images": [],
+   "variants": [
+    {
+     "price": "25.00",
+     "compare_at_price": null,
+     "available": true,
+     "sku": ""
+    }
+   ]
+  }
+ ]
+}

@@ -77,6 +77,7 @@ class FakeFetcher:
 
 
 def test_crawl_follows_pagination(cfg):
+    cfg.detail = None
     f = FakeFetcher({
         BASE + "index.html": (FIX / "mystery_p1.html").read_text(),
         BASE + "page-2.html": (FIX / "mystery_p2.html").read_text(),
@@ -88,7 +89,7 @@ def test_crawl_follows_pagination(cfg):
 
 
 def test_crawl_stops_at_max_pages(cfg):
-    cfg.max_pages = 1
+    cfg.max_pages, cfg.detail = 1, None
     f = FakeFetcher({BASE + "index.html": (FIX / "mystery_p1.html").read_text()})
     assert len(crawl(cfg, f)) == 20
 
@@ -156,6 +157,8 @@ def test_cli_run_end_to_end(tmp_path, monkeypatch, capsys):
     p2 = (FIX / "mystery_p2.html").read_text()
     respx.get(BASE + "index.html").respond(200, text=p1)
     respx.get(BASE + "page-2.html").respond(200, text=p2)
+    detail = respx.get(url__regex=r"/catalogue/[^/]+_\d+/index\.html$").respond(
+        200, text=(FIX / "sharp_objects.html").read_text())
 
     cfg_path = tmp_path / "books.yaml"
     cfg_path.write_text(EXAMPLE.read_text().replace("delay: 1.0", "delay: 0"))
@@ -165,6 +168,10 @@ def test_cli_run_end_to_end(tmp_path, monkeypatch, capsys):
     assert cli.main(["--db", db, "run", str(cfg_path), "-o", str(out)]) == 0
     assert "32 items, 32 new" in capsys.readouterr().out
     assert out.exists() and not hook.called
+    assert detail.call_count == 32
+    ws = openpyxl.load_workbook(out).active
+    header = [c.value for c in ws[1]]
+    assert {"upc", "stock", "category", "description"} <= set(header)
 
     # second run: one book got 10% cheaper, another 2% cheaper (below the 5% alert threshold)
     respx.get(BASE + "index.html").respond(
@@ -179,3 +186,91 @@ def test_cli_run_end_to_end(tmp_path, monkeypatch, capsys):
     assert cli.main(["--db", db, "history", str(cfg_path),
                      "https://books.toscrape.com/catalogue/sharp-objects_997/index.html"]) == 0
     assert "43.04" in capsys.readouterr().out
+
+
+def test_detail_page_fields(cfg):
+    from price_watch.extract import extract_one
+
+    url = "https://books.toscrape.com/catalogue/sharp-objects_997/index.html"
+    row = extract_one((FIX / "sharp_objects.html").read_text(), cfg.detail.fields, url)
+    assert row["upc"] == "e00eb4fd7b871a48"
+    assert row["stock"] == 20
+    assert row["category"] == "Mystery"
+    assert row["description"].startswith("WICKED above her hipbone")
+
+
+def test_detail_failure_keeps_the_row(cfg):
+    from price_watch.crawl import add_details
+
+    class Broken:
+        def get(self, url):
+            raise httpx.ConnectError("boom")
+
+    rows = [{"url": "https://x.test/a", "price": 1.0}]
+    add_details(cfg, Broken(), rows)
+    assert rows[0]["price"] == 1.0 and "boom" in rows[0]["error"]
+
+
+def test_shopify_source(tmp_path):
+    p = tmp_path / "s.yaml"
+    p.write_text("name: s\nsource: shopify\nstart_url: https://shop.test/collections/sale/\n")
+    c = config.load(p)
+    pages = {
+        "https://shop.test/collections/sale/products.json?limit=250&page=1": (FIX / "shopify_p1.json").read_text(),
+        "https://shop.test/collections/sale/products.json?limit=250&page=2": '{"products": []}',
+    }
+    f = FakeFetcher(pages)
+    rows = crawl(c, f)
+    assert len(f.calls) == 2
+    shoe, tee = rows
+    assert shoe == {
+        "title": "Wool Runner", "url": "https://shop.test/products/wool-runner",
+        "price": 105.0, "compare_at_price": 140.0, "on_sale": True, "available": True,
+        "vendor": "Acme", "product_type": "Shoes", "sku": "WR-8", "variants": 2,
+        "image": "https://cdn.example/w.jpg",
+    }
+    assert tee["on_sale"] is False and tee["sku"] is None and tee["image"] is None
+
+
+def test_shopify_root_url_uses_whole_catalogue(tmp_path):
+    p = tmp_path / "s.yaml"
+    p.write_text("name: s\nsource: shopify\nstart_url: https://shop.test/pages/about\nmax_pages: 1\n")
+    f = FakeFetcher({"https://shop.test/products.json?limit=250&page=1": '{"products": []}'})
+    assert crawl(config.load(p), f) == []
+
+
+def test_unknown_source_is_rejected(tmp_path):
+    p = tmp_path / "s.yaml"
+    p.write_text("name: s\nsource: magento\nstart_url: https://x.test\n")
+    with pytest.raises(ValueError, match="unknown source"):
+        config.load(p)
+
+
+def test_google_sheets_export(monkeypatch):
+    import sys
+    import types
+
+    calls = {}
+
+    class WS:
+        def clear(self): calls["clear"] = True
+        def update(self, values, start): calls["values"], calls["start"] = values, start
+        def freeze(self, rows): calls["freeze"] = rows
+
+    class Book:
+        def worksheet(self, name):
+            calls["tab"] = name
+            return WS()
+
+    class GC:
+        def open_by_key(self, key):
+            calls["key"] = key
+            return Book()
+
+    fake = types.SimpleNamespace(service_account=lambda filename=None: GC(),
+                                 WorksheetNotFound=type("WNF", (Exception,), {}))
+    monkeypatch.setitem(sys.modules, "gspread", fake)
+    url = export.write([{"title": "A", "price": None}], "sheets:abc123/prices")
+    assert url == "https://docs.google.com/spreadsheets/d/abc123"
+    assert calls["key"] == "abc123" and calls["tab"] == "prices"
+    assert calls["values"] == [["title", "price"], ["A", ""]]

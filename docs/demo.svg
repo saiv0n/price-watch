@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="392" viewBox="0 0 780 392">
+<rect width="780" height="392" rx="10" fill="#0d1117"/>
+<circle cx="22" cy="22" r="6" fill="#ff5f57"/><circle cx="42" cy="22" r="6" fill="#febc2e"/><circle cx="62" cy="22" r="6" fill="#28c840"/>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<rect x="18" y="279" width="744" height="82" rx="6" fill="#161b22" stroke="#5865f2" stroke-width="1"/>
+<rect x="18" y="279" width="4" height="82" fill="#5865f2"/>
+<text x="22" y="56" fill="#e6edf3" xml:space="preserve">$ price-watch run examples/books.yaml -o books.xlsx</text>
+<text x="22" y="80" fill="#9da7b3" xml:space="preserve">32 items, 32 new, 0 price changes, 0 drops</text>
+<text x="22" y="104" fill="#9da7b3" xml:space="preserve">wrote books.xlsx</text>
+<text x="22" y="128" fill="#fff" xml:space="preserve"></text>
+<text x="22" y="152" fill="#6e7781" xml:space="preserve"># the next day</text>
+<text x="22" y="176" fill="#e6edf3" xml:space="preserve">$ price-watch run examples/books.yaml</text>
+<text x="22" y="200" fill="#9da7b3" xml:space="preserve">32 items, 0 new, 1 price changes, 1 drops</text>
+<text x="22" y="224" fill="#3fb950" xml:space="preserve">   -10.0%  47.82 -&gt; 43.04  Sharp Objects</text>
+<text x="22" y="248" fill="#fff" xml:space="preserve"></text>
+<text x="22" y="272" fill="#6e7781" xml:space="preserve"># and in your Discord / Slack / Telegram:</text>
+<text x="34" y="296" fill="#c9d1d9" xml:space="preserve">Price drops on books:</text>
+<text x="34" y="320" fill="#c9d1d9" xml:space="preserve">- Sharp Objects: 47.82 -&gt; 43.04 (-10.0%)</text>
+<text x="34" y="344" fill="#c9d1d9" xml:space="preserve">  https://books.toscrape.com/catalogue/sharp-objects_997/index.html</text>
+</g></svg>

@@ -76,6 +76,11 @@ def extract(html: str, item_css: str, fields: dict[str, FieldSpec], base_url: st
     return rows
 
 
+def extract_one(html: str, fields: dict[str, FieldSpec], base_url: str) -> dict:
+    soup = BeautifulSoup(html, "lxml")
+    return {name: _value(soup, spec, base_url) for name, spec in fields.items()}
+
+
 def next_page(html: str, css: str | None, base_url: str) -> str | None:
     if not css:
         return None

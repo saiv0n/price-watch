@@ -6,8 +6,7 @@ import logging
 import sys
 
 from . import __version__, config, export, notify
-from .crawl import crawl
-from .extract import extract
+from .crawl import add_details, crawl
 from .fetch import BrowserFetcher, Fetcher
 from .store import Store
 
@@ -46,17 +45,23 @@ def cmd_run(args) -> int:
 
 def cmd_test(args) -> int:
     cfg = config.load(args.config)
-    url = args.url or cfg.start_urls[0]
+    cfg.start_urls = [args.url or cfg.start_urls[0]]
+    cfg.max_pages = 1
+    # detail pages only for the items we print, not the whole first page
+    detail, cfg.detail = cfg.detail, None
     f = _fetcher(cfg)
     try:
-        html = f.get(url)
+        rows = crawl(cfg, f)
+        if detail:
+            cfg.detail = detail
+            add_details(cfg, f, rows[: args.limit])
     finally:
         f.close()
-    rows = extract(html, cfg.item, cfg.fields, url)
-    print(f"{len(rows)} items matched {cfg.item!r} on {url}")
+    print(f"{len(rows)} items on {cfg.start_urls[0]}")
     for r in rows[: args.limit]:
         print(json.dumps(r, ensure_ascii=False, indent=2))
-    empty = [k for k in cfg.fields if rows and all(r.get(k) is None for r in rows)]
+    shown = rows[: args.limit]
+    empty = [k for k in (shown[0] if shown else {}) if all(r.get(k) is None for r in shown)]
     if empty:
         print(f"warning: these fields were empty on every item: {', '.join(empty)}", file=sys.stderr)
     return 0 if rows else 1
